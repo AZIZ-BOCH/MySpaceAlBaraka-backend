@@ -39,4 +39,7 @@ public class Client {
 
     @OneToMany(mappedBy = "client", cascade = CascadeType.ALL)
     private List<Compte> comptes = new ArrayList<>();
+
+    @OneToMany(mappedBy = "client", cascade = CascadeType.ALL)
+    private List<Carte> cartes = new ArrayList<>();
 }
