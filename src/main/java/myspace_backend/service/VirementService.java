@@ -1,10 +1,12 @@
 package myspace_backend.service;
 
 import myspace_backend.dto.request.VirementRequestDTO;
+import myspace_backend.entity.Beneficiaire;
 import myspace_backend.entity.Compte;
 import myspace_backend.entity.Transaction;
 import myspace_backend.entity.Utilisateur;
 import myspace_backend.exception.IdentifiantsInvalidesException;
+import myspace_backend.repository.BeneficiaireRepository;
 import myspace_backend.repository.CompteRepository;
 import myspace_backend.repository.TransactionRepository;
 import myspace_backend.repository.UtilisateurRepository;
@@ -22,9 +24,10 @@ public class VirementService {
     private final CompteRepository compteRepository;
     private final TransactionRepository transactionRepository;
     private final UtilisateurRepository utilisateurRepository;
+    private final BeneficiaireRepository beneficiaireRepository;
     private final AuthService authService;
     private final AuditService auditService;
-    private final NotificationService notificationService; // 👈 Inject NotificationService
+    private final NotificationService notificationService;
 
     @Transactional
     public void demanderOtpVirement(String userEmail) {
@@ -64,10 +67,30 @@ public class VirementService {
 
         // 5. Handle OTP validation if transfer is to a Third Party (VERS_TIERS)
         if ("VERS_TIERS".equalsIgnoreCase(dto.getTypeVirement())) {
-            if (dto.getCodeOtp() == null || dto.getCodeOtp().isBlank()) {
-                throw new RuntimeException("Code OTP requis pour un virement vers un tiers.");
+            boolean estBeneficiaireEnregistre = beneficiaireRepository
+                    .findByClientAndRib(utilisateur.getClient(), dto.getRibDestination())
+                    .isPresent();
+
+            // Require OTP only if the beneficiary is NOT already saved
+            if (!estBeneficiaireEnregistre) {
+                if (dto.getCodeOtp() == null || dto.getCodeOtp().isBlank()) {
+                    throw new RuntimeException("Code OTP requis pour un virement vers un nouveau bénéficiaire.");
+                }
+                authService.validerOtpVirement(userEmail, dto.getCodeOtp());
+
+                // Auto-save new beneficiary upon first successful transfer
+                String nomBeneficiaire = compteDest.getClient() != null
+                        ? compteDest.getClient().getNom() + " " + compteDest.getClient().getPrenom()
+                        : "Bénéficiaire " + dto.getRibDestination();
+
+                Beneficiaire nouveauBeneficiaire = Beneficiaire.builder()
+                        .nom(nomBeneficiaire)
+                        .rib(dto.getRibDestination())
+                        .client(utilisateur.getClient())
+                        .build();
+
+                beneficiaireRepository.save(nouveauBeneficiaire);
             }
-            authService.validerOtpVirement(userEmail, dto.getCodeOtp());
         }
 
         // 6. Calculate new balances
@@ -112,10 +135,7 @@ public class VirementService {
         auditService.enregistrer(actionType, description, userEmail);
 
         // 📩 10. Trigger Email Notifications
-        // a. Large transaction alert (if amount >= 1000 TND)
         notificationService.notifierGrandVirement(userEmail, dto.getMontant(), dto.getRibDestination());
-
-        // b. Low balance alert (if remaining balance < 50 TND)
         notificationService.notifierSoldeBas(userEmail, nouveauSoldeSource);
     }
 
