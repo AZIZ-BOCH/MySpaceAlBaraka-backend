@@ -28,6 +28,16 @@ public class CodeOtp {
     @Builder.Default
     private boolean utilise = false;
 
+    // Nombre de tentatives de saisie incorrectes pour ce code
+    @Builder.Default
+    @Column(nullable = false)
+    private int attempts = 0;
+
+    // Verrouillé après trop de tentatives incorrectes (empêche toute nouvelle tentative sur ce code)
+    @Builder.Default
+    @Column(nullable = false)
+    private boolean verrouille = false;
+
     // Lié à l'utilisateur (pour le login)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "utilisateur_id", nullable = true)

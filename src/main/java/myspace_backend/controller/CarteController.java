@@ -46,8 +46,10 @@ public class CarteController {
     @PatchMapping("/{carteId}/controles")
     public ResponseEntity<CarteResponse> modifierControles(
             @PathVariable String carteId,
-            @RequestBody CarteRequestDTO request) {
-        return ResponseEntity.ok(carteService.modifierControles(carteId, request));
+            @RequestBody CarteRequestDTO request,
+            Authentication authentication) { // 👈 1. Added Authentication parameter
+        String email = authentication.getName(); // 👈 2. Extract user's email
+        return ResponseEntity.ok(carteService.modifierControles(carteId, request, email)); // 👈 3. Pass email to service
     }
 
     // 5. Update Limits (Plafonds)

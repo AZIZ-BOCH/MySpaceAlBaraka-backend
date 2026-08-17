@@ -9,6 +9,7 @@ import myspace_backend.dto.response.LoginResponse;
 import myspace_backend.entity.CodeOtp;
 import myspace_backend.entity.Utilisateur;
 import myspace_backend.exception.CodeOtpInvalideException;
+import myspace_backend.exception.CodeOtpVerrouilleException;
 import myspace_backend.exception.IdentifiantsInvalidesException;
 import myspace_backend.repository.CodeOtpRepository;
 import myspace_backend.repository.UtilisateurRepository;
@@ -25,11 +26,14 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class AuthService {
 
+    private static final int MAX_TENTATIVES_OTP = 3;
+
     private final UtilisateurRepository utilisateurRepository;
     private final CodeOtpRepository codeOtpRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final EmailService emailService;
+    private final OtpTentativeService otpTentativeService;
 
     /**
      * Étape 1 du Login (2FA) : Vérification des identifiants & Génération d'OTP
@@ -72,7 +76,7 @@ public class AuthService {
     }
 
     /**
-     * Étape 2 du Login (2FA) : Validation du code OTP & Génération JWT
+     * Étape 2 du Login (2FA) : Validation du code OTP & Génération JWT / Détection 1ère Connexion
      */
     @Transactional
     public LoginResponse verifierOtpEtConnecter(VerifyOtpRequest request) {
@@ -80,19 +84,8 @@ public class AuthService {
         Utilisateur utilisateur = utilisateurRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new IdentifiantsInvalidesException("Utilisateur non trouvé"));
 
-        CodeOtp otpEntity = codeOtpRepository.findTopByUtilisateurAndUtiliseFalseOrderByDateExpirationDesc(utilisateur)
-                .orElseThrow(() -> new CodeOtpInvalideException("Aucun code OTP valide n'a été trouvé"));
-
-        if (!otpEntity.getCode().equals(request.getCode())) {
-            throw new CodeOtpInvalideException("Code OTP incorrect");
-        }
-
-        if (otpEntity.getDateExpiration().isBefore(LocalDateTime.now())) {
-            throw new CodeOtpInvalideException("Le code OTP a expiré");
-        }
-
-        otpEntity.setUtilise(true);
-        codeOtpRepository.save(otpEntity);
+        CodeOtp otpEntity = recupererOtpValide(utilisateur);
+        validerCodeOtp(otpEntity, request.getCode());
 
         if (utilisateur.isPremiereConnexion()) {
             return new LoginResponse(
@@ -157,6 +150,7 @@ public class AuthService {
             throw new IllegalArgumentException("Le mot de passe doit contenir au moins un caractère spécial (!@#$%^&*...).");
         }
     }
+
     /**
      * Étape 1 du Mot de Passe Oublié : Vérification Identifiant/Email & Génération OTP
      */
@@ -166,7 +160,6 @@ public class AuthService {
         Utilisateur utilisateur = utilisateurRepository.findByIdentifiantOrEmail(request.getIdentifiant(), request.getIdentifiant())
                 .orElseThrow(() -> new IdentifiantsInvalidesException("Informations incorrectes."));
 
-        // Match provided email with account email
         if (!utilisateur.getEmail().equalsIgnoreCase(request.getEmail())) {
             throw new IdentifiantsInvalidesException("Informations incorrectes.");
         }
@@ -175,7 +168,6 @@ public class AuthService {
             throw new IdentifiantsInvalidesException("Votre compte a été suspendu par l'administration.");
         }
 
-        // Invalidate old OTPs & generate new one
         codeOtpRepository.invaliderAnciensOtpsUtilisateur(utilisateur.getId());
 
         String codeOtp = genererCodeOtp();
@@ -201,28 +193,17 @@ public class AuthService {
         Utilisateur utilisateur = utilisateurRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new IdentifiantsInvalidesException("Utilisateur non trouvé"));
 
-        CodeOtp otpEntity = codeOtpRepository.findTopByUtilisateurAndUtiliseFalseOrderByDateExpirationDesc(utilisateur)
-                .orElseThrow(() -> new CodeOtpInvalideException("Aucun code OTP valide n'a été trouvé"));
+        CodeOtp otpEntity = recupererOtpValide(utilisateur);
+        validerCodeOtp(otpEntity, request.getCode());
 
-        if (!otpEntity.getCode().equals(request.getCode())) {
-            throw new CodeOtpInvalideException("Code OTP incorrect");
-        }
-
-        if (otpEntity.getDateExpiration().isBefore(LocalDateTime.now())) {
-            throw new CodeOtpInvalideException("Le code OTP a expiré");
-        }
-
-        otpEntity.setUtilise(true);
-        codeOtpRepository.save(otpEntity);
-
-        // Generate temporary password & reset flag
         String mdpTemporaire = genererMotDePasseTemporaire();
         utilisateur.setMotDePasse(passwordEncoder.encode(mdpTemporaire));
         utilisateur.setPremiereConnexion(true);
 
         utilisateurRepository.save(utilisateur);
 
-        // Send email with credentials
+        codeOtpRepository.invaliderAnciensOtpsUtilisateur(utilisateur.getId());
+
         String contenuEmail = String.format(
                 "Bonjour,\n\nVoici vos identifiants pour vous connecter à My Space :\n\n" +
                         "Identifiant : %s\n" +
@@ -244,6 +225,7 @@ public class AuthService {
         }
         return sb.toString();
     }
+
     /**
      * Génération & Envoi OTP pour un Virement vers un Tiers
      */
@@ -269,22 +251,52 @@ public class AuthService {
     }
 
     /**
-     * Validation OTP pour Virement
+     * Validation OTP pour Virement / Cartes
      */
     @Transactional
     public void validerOtpVirement(String email, String code) {
         Utilisateur utilisateur = utilisateurRepository.findByEmail(email)
                 .orElseThrow(() -> new IdentifiantsInvalidesException("Utilisateur non trouvé"));
 
-        CodeOtp otpEntity = codeOtpRepository.findTopByUtilisateurAndUtiliseFalseOrderByDateExpirationDesc(utilisateur)
-                .orElseThrow(() -> new CodeOtpInvalideException("Aucun code OTP valide n'a été trouvé"));
+        CodeOtp otpEntity = recupererOtpValide(utilisateur);
+        validerCodeOtp(otpEntity, code);
+    }
 
-        if (!otpEntity.getCode().equals(code)) {
-            throw new CodeOtpInvalideException("Code OTP incorrect");
+    // --- OTP : récupération & validation centralisées ---
+
+    private CodeOtp recupererOtpValide(Utilisateur utilisateur) {
+        return codeOtpRepository.findTopByUtilisateurAndUtiliseFalseOrderByDateExpirationDesc(utilisateur)
+                .orElseThrow(() -> new CodeOtpInvalideException("Aucun code OTP valide n'a été trouvé"));
+    }
+
+    private void validerCodeOtp(CodeOtp otpEntity, String codeSaisi) {
+
+        if (otpEntity.isVerrouille()) {
+            throw new CodeOtpVerrouilleException(
+                    "Ce code a été verrouillé suite à trop de tentatives incorrectes. Veuillez redemander un nouveau code."
+            );
         }
 
         if (otpEntity.getDateExpiration().isBefore(LocalDateTime.now())) {
+            otpTentativeService.marquerExpire(otpEntity.getId());
             throw new CodeOtpInvalideException("Le code OTP a expiré");
+        }
+
+        if (!otpEntity.getCode().equals(codeSaisi)) {
+            int tentatives = otpEntity.getAttempts() + 1;
+
+            if (tentatives >= MAX_TENTATIVES_OTP) {
+                otpTentativeService.enregistrerTentativeEchouee(otpEntity.getId(), tentatives, true);
+                throw new CodeOtpVerrouilleException(
+                        "Trop de tentatives incorrectes. Veuillez redemander un nouveau code."
+                );
+            }
+
+            otpTentativeService.enregistrerTentativeEchouee(otpEntity.getId(), tentatives, false);
+            int restantes = MAX_TENTATIVES_OTP - tentatives;
+            throw new CodeOtpInvalideException(
+                    "Code OTP incorrect. Il vous reste " + restantes + " tentative(s)."
+            );
         }
 
         otpEntity.setUtilise(true);

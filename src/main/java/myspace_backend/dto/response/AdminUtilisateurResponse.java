@@ -12,5 +12,6 @@ public class AdminUtilisateurResponse {
     private String nom;
     private String prenom;
     private String cin;
+    private String passeport;
     private boolean actif;
 }

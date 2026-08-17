@@ -17,6 +17,7 @@ public class CarteService {
 
     private final CarteRepository carteRepository;
     private final AuthService authService;
+    private final NotificationService notificationService; // 👈 Inject NotificationService
 
     public List<CarteResponse> obtenirCartesDuClient(String email) {
         return carteRepository.findByClientEmail(email)
@@ -61,12 +62,19 @@ public class CarteService {
     }
 
     @Transactional
-    public CarteResponse modifierControles(String carteId, CarteRequestDTO req) {
+    public CarteResponse modifierControles(String carteId, CarteRequestDTO req, String userEmail) {
         Carte carte = carteRepository.findByCarteId(carteId)
                 .orElseThrow(() -> new RuntimeException("Carte non trouvée : " + carteId));
 
-        if (req.getEstGelee() != null) carte.setEstGelee(req.getEstGelee());
-        if (req.getPaiementsEnLigne() != null) carte.setPaiementsEnLigne(req.getPaiementsEnLigne());
+        if (req.getEstGelee() != null && req.getEstGelee() != carte.isEstGelee()) {
+            carte.setEstGelee(req.getEstGelee());
+            // 📩 Alert user via email when card is frozen or unfrozen
+            notificationService.notifierStatutCarte(userEmail, carte.getCarteId(), req.getEstGelee());
+        }
+
+        if (req.getPaiementsEnLigne() != null) {
+            carte.setPaiementsEnLigne(req.getPaiementsEnLigne());
+        }
 
         return CarteResponse.fromEntity(carteRepository.save(carte));
     }

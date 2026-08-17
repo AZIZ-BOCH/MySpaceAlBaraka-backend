@@ -52,11 +52,15 @@ public class AdminService {
                 .filter(u -> {
                     if (recherche == null || recherche.isBlank()) return true;
                     String q = recherche.toLowerCase();
-                    return u.getIdentifiant().toLowerCase().contains(q) ||
-                            u.getEmail().toLowerCase().contains(q) ||
-                            u.getClient().getNom().toLowerCase().contains(q) ||
-                            u.getClient().getPrenom().toLowerCase().contains(q) ||
-                            u.getClient().getCin().toLowerCase().contains(q);
+
+                    boolean matchIdentifiant = u.getIdentifiant() != null && u.getIdentifiant().toLowerCase().contains(q);
+                    boolean matchEmail = u.getEmail() != null && u.getEmail().toLowerCase().contains(q);
+                    boolean matchNom = u.getClient().getNom() != null && u.getClient().getNom().toLowerCase().contains(q);
+                    boolean matchPrenom = u.getClient().getPrenom() != null && u.getClient().getPrenom().toLowerCase().contains(q);
+                    boolean matchCin = u.getClient().getCin() != null && u.getClient().getCin().toLowerCase().contains(q);
+                    boolean matchPasseport = u.getClient().getPasseport() != null && u.getClient().getPasseport().toLowerCase().contains(q);
+
+                    return matchIdentifiant || matchEmail || matchNom || matchPrenom || matchCin || matchPasseport;
                 })
                 .map(u -> new AdminUtilisateurResponse(
                         u.getId(),
@@ -65,6 +69,7 @@ public class AdminService {
                         u.getClient().getNom(),
                         u.getClient().getPrenom(),
                         u.getClient().getCin(),
+                        u.getClient().getPasseport(),
                         u.isActif()
                 ))
                 .collect(Collectors.toList());

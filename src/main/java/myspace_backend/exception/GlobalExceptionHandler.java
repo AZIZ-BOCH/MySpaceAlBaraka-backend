@@ -49,6 +49,17 @@ public class GlobalExceptionHandler {
         return construireReponse(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 
+    @ExceptionHandler(CodeOtpInvalideException.class)
+    public ResponseEntity<ErreurResponse> gererCodeOtpInvalide(CodeOtpInvalideException ex) {
+        return construireReponse(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    // Code OTP verrouillé après trop de tentatives incorrectes (423 Locked)
+    @ExceptionHandler(CodeOtpVerrouilleException.class)
+    public ResponseEntity<ErreurResponse> gererCodeOtpVerrouille(CodeOtpVerrouilleException ex) {
+        return construireReponse(HttpStatus.LOCKED, ex.getMessage());
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErreurResponse> gererValidation(MethodArgumentNotValidException ex) {
         String message = ex.getBindingResult().getFieldErrors().stream()

@@ -23,7 +23,8 @@ public class VirementService {
     private final TransactionRepository transactionRepository;
     private final UtilisateurRepository utilisateurRepository;
     private final AuthService authService;
-    private final AuditService auditService; // 👈 Inject AuditService
+    private final AuditService auditService;
+    private final NotificationService notificationService; // 👈 Inject NotificationService
 
     @Transactional
     public void demanderOtpVirement(String userEmail) {
@@ -109,6 +110,13 @@ public class VirementService {
         );
 
         auditService.enregistrer(actionType, description, userEmail);
+
+        // 📩 10. Trigger Email Notifications
+        // a. Large transaction alert (if amount >= 1000 TND)
+        notificationService.notifierGrandVirement(userEmail, dto.getMontant(), dto.getRibDestination());
+
+        // b. Low balance alert (if remaining balance < 50 TND)
+        notificationService.notifierSoldeBas(userEmail, nouveauSoldeSource);
     }
 
     private BigDecimal calculerSoldeActuel(Compte compte) {
