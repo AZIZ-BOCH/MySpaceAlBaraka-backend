@@ -17,7 +17,8 @@ public class CarteService {
 
     private final CarteRepository carteRepository;
     private final AuthService authService;
-    private final NotificationService notificationService; // 👈 Inject NotificationService
+    private final NotificationService notificationService;
+    private final AuditService auditService; // 👈 Inject AuditService
 
     public List<CarteResponse> obtenirCartesDuClient(String email) {
         return carteRepository.findByClientEmail(email)
@@ -70,6 +71,14 @@ public class CarteService {
             carte.setEstGelee(req.getEstGelee());
             // 📩 Alert user via email when card is frozen or unfrozen
             notificationService.notifierStatutCarte(userEmail, carte.getCarteId(), req.getEstGelee());
+
+            // 📜 Record Audit Log for Admin View
+            String actionType = req.getEstGelee() ? "GEL_CARTE" : "DEGEL_CARTE";
+            String description = String.format("La carte %s a été %s par %s",
+                    carte.getCarteId(),
+                    req.getEstGelee() ? "gelée" : "dégelée",
+                    userEmail);
+            auditService.enregistrer(actionType, description, userEmail);
         }
 
         if (req.getPaiementsEnLigne() != null) {
