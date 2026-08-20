@@ -11,4 +11,5 @@ public class VirementRequestDTO {
     private String motif;
     private String typeVirement; // "ENTRE_MES_COMPTES" or "VERS_TIERS"
     private String codeOtp;       // Required only for "VERS_TIERS"
+    private boolean enregistrerBeneficiaire; // 👈 NOUVEAU : choix de l'utilisateur
 }

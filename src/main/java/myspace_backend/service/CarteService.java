@@ -3,8 +3,10 @@ package myspace_backend.service;
 import lombok.RequiredArgsConstructor;
 import myspace_backend.dto.request.CarteRequestDTO;
 import myspace_backend.dto.response.CarteResponse;
+import myspace_backend.dto.response.TransactionCarteResponse;
 import myspace_backend.entity.Carte;
 import myspace_backend.repository.CarteRepository;
+import myspace_backend.repository.TransactionCarteRepository; // 👈 1. Import repository
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,9 +18,10 @@ import java.util.stream.Collectors;
 public class CarteService {
 
     private final CarteRepository carteRepository;
+    private final TransactionCarteRepository transactionCarteRepository;
     private final AuthService authService;
     private final NotificationService notificationService;
-    private final AuditService auditService; // 👈 Inject AuditService
+    private final AuditService auditService;
 
     public List<CarteResponse> obtenirCartesDuClient(String email) {
         return carteRepository.findByClientEmail(email)
@@ -69,10 +72,8 @@ public class CarteService {
 
         if (req.getEstGelee() != null && req.getEstGelee() != carte.isEstGelee()) {
             carte.setEstGelee(req.getEstGelee());
-            // 📩 Alert user via email when card is frozen or unfrozen
             notificationService.notifierStatutCarte(userEmail, carte.getCarteId(), req.getEstGelee());
 
-            // 📜 Record Audit Log for Admin View
             String actionType = req.getEstGelee() ? "GEL_CARTE" : "DEGEL_CARTE";
             String description = String.format("La carte %s a été %s par %s",
                     carte.getCarteId(),
@@ -86,5 +87,23 @@ public class CarteService {
         }
 
         return CarteResponse.fromEntity(carteRepository.save(carte));
+    }
+
+    // 👈 3. New method to fetch card transactions
+    public List<TransactionCarteResponse> obtenirDernieresTransactions(String carteId) {
+        Carte carte = carteRepository.findByCarteId(carteId)
+                .orElseThrow(() -> new RuntimeException("Carte non trouvée : " + carteId));
+
+        return transactionCarteRepository.findTop10ByCarteIdOrderByDateTransactionDesc(carte.getId())
+                .stream()
+                .map(t -> TransactionCarteResponse.builder()
+                        .id(t.getId())
+                        .description(t.getDescription())
+                        .montant(t.getMontant())
+                        .dateTransaction(t.getDateTransaction())
+                        .statut(t.getStatut())
+                        .type(t.getType())
+                        .build())
+                .collect(Collectors.toList());
     }
 }

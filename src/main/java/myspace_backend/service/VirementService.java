@@ -78,18 +78,20 @@ public class VirementService {
                 }
                 authService.validerOtpVirement(userEmail, dto.getCodeOtp());
 
-                // Auto-save new beneficiary upon first successful transfer
-                String nomBeneficiaire = compteDest.getClient() != null
-                        ? compteDest.getClient().getNom() + " " + compteDest.getClient().getPrenom()
-                        : "Bénéficiaire " + dto.getRibDestination();
+                // Save new beneficiary only if the user explicitly chose to
+                if (dto.isEnregistrerBeneficiaire()) {
+                    String nomBeneficiaire = compteDest.getClient() != null
+                            ? compteDest.getClient().getNom() + " " + compteDest.getClient().getPrenom()
+                            : "Bénéficiaire " + dto.getRibDestination();
 
-                Beneficiaire nouveauBeneficiaire = Beneficiaire.builder()
-                        .nom(nomBeneficiaire)
-                        .rib(dto.getRibDestination())
-                        .client(utilisateur.getClient())
-                        .build();
+                    Beneficiaire nouveauBeneficiaire = Beneficiaire.builder()
+                            .nom(nomBeneficiaire)
+                            .rib(dto.getRibDestination())
+                            .client(utilisateur.getClient())
+                            .build();
 
-                beneficiaireRepository.save(nouveauBeneficiaire);
+                    beneficiaireRepository.save(nouveauBeneficiaire);
+                }
             }
         }
 

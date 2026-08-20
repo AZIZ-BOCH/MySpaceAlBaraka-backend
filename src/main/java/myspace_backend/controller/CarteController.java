@@ -3,6 +3,7 @@ package myspace_backend.controller;
 import lombok.RequiredArgsConstructor;
 import myspace_backend.dto.request.CarteRequestDTO;
 import myspace_backend.dto.response.CarteResponse;
+import myspace_backend.dto.response.TransactionCarteResponse;
 import myspace_backend.service.CarteService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -47,9 +48,9 @@ public class CarteController {
     public ResponseEntity<CarteResponse> modifierControles(
             @PathVariable String carteId,
             @RequestBody CarteRequestDTO request,
-            Authentication authentication) { // 👈 1. Added Authentication parameter
-        String email = authentication.getName(); // 👈 2. Extract user's email
-        return ResponseEntity.ok(carteService.modifierControles(carteId, request, email)); // 👈 3. Pass email to service
+            Authentication authentication) {
+        String email = authentication.getName();
+        return ResponseEntity.ok(carteService.modifierControles(carteId, request, email));
     }
 
     // 5. Update Limits (Plafonds)
@@ -60,5 +61,13 @@ public class CarteController {
             Authentication authentication) {
         String email = authentication.getName();
         return ResponseEntity.ok(carteService.modifierPlafonds(carteId, request, email));
+    }
+
+    // 👈 6. New endpoint to fetch the last 10 card transactions
+    @GetMapping("/{carteId}/transactions")
+    public ResponseEntity<List<TransactionCarteResponse>> obtenirTransactions(
+            @PathVariable String carteId,
+            Authentication authentication) {
+        return ResponseEntity.ok(carteService.obtenirDernieresTransactions(carteId));
     }
 }
