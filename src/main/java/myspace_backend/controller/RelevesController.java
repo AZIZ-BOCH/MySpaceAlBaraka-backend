@@ -2,6 +2,7 @@ package myspace_backend.controller;
 
 import lombok.RequiredArgsConstructor;
 import myspace_backend.dto.response.CompteResponse;
+import myspace_backend.dto.response.SoldeMensuelResponse;
 import myspace_backend.dto.response.TransactionResponse;
 import myspace_backend.service.RelevesService;
 import org.springframework.core.io.InputStreamResource;
@@ -42,7 +43,17 @@ public class RelevesController {
         return ResponseEntity.ok(transactions);
     }
 
-    // 👈 NOUVEAU : Endpoint de téléchargement du PDF
+    // 👈 NOUVEAU : Évolution du solde pour le graphique du dashboard
+    @GetMapping("/api/comptes/evolution-solde")
+    public ResponseEntity<List<SoldeMensuelResponse>> obtenirEvolutionSolde(
+            Authentication authentication,
+            @RequestParam String rib) {
+
+        String email = authentication.getName();
+        List<SoldeMensuelResponse> evolution = relevesService.obtenirEvolutionSolde(email, rib);
+        return ResponseEntity.ok(evolution);
+    }
+
     @GetMapping("/api/transactions/pdf")
     public ResponseEntity<InputStreamResource> telechargerPdfReleve(
             Authentication authentication,

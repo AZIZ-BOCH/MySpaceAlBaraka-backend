@@ -4,6 +4,7 @@ import com.lowagie.text.*;
 import com.lowagie.text.pdf.*;
 import lombok.RequiredArgsConstructor;
 import myspace_backend.dto.response.CompteResponse;
+import myspace_backend.dto.response.SoldeMensuelResponse;
 import myspace_backend.dto.response.TransactionResponse;
 import myspace_backend.entity.Client;
 import myspace_backend.entity.Compte;
@@ -27,6 +28,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -79,6 +81,40 @@ public class RelevesService {
                 .toList();
     }
 
+    // 👈 NOUVEAU : Évolution du solde sur les 6 derniers mois + aujourd'hui
+    @Transactional(readOnly = true)
+    public List<SoldeMensuelResponse> obtenirEvolutionSolde(String email, String rib) {
+        Client client = recupererClientParEmail(email);
+
+        Compte compte = compteRepository.findByRibAndClient_Id(rib, client.getId())
+                .orElseThrow(() -> new AccesRefuseException("Ce RIB ne vous appartient pas"));
+
+        List<SoldeMensuelResponse> evolution = new ArrayList<>();
+        YearMonth moisActuel = YearMonth.now();
+
+        for (int i = NOMBRE_MOIS_AUTORISES; i >= 1; i--) {
+            YearMonth mois = moisActuel.minusMonths(i);
+            LocalDate dernierJour = mois.atEndOfMonth();
+
+            BigDecimal solde = transactionRepository
+                    .findTopByCompte_IdAndDateOperationLessThanEqualOrderByDateOperationDescIdDesc(
+                            compte.getId(), dernierJour)
+                    .map(Transaction::getSolde)
+                    .orElse(BigDecimal.ZERO);
+
+            evolution.add(new SoldeMensuelResponse(mois.toString(), solde));
+        }
+
+        BigDecimal soldeActuel = transactionRepository
+                .findTopByCompte_IdOrderByDateOperationDescIdDesc(compte.getId())
+                .map(Transaction::getSolde)
+                .orElse(BigDecimal.ZERO);
+
+        evolution.add(new SoldeMensuelResponse("Aujourd'hui", soldeActuel));
+
+        return evolution;
+    }
+
     @Transactional(readOnly = true)
     public ByteArrayInputStream genererPdfReleve(String email, String rib, YearMonth mois) {
         Client client = recupererClientParEmail(email);
@@ -96,9 +132,6 @@ public class RelevesService {
             PdfWriter.getInstance(document, out);
             document.open();
 
-            // ----------------------------------------------------
-            // LOGO AL BARAKA BANK
-            // ----------------------------------------------------
             try {
                 ClassPathResource imgResource = new ClassPathResource("static/logo-albaraka-official-transparent.png");
 
@@ -110,7 +143,6 @@ public class RelevesService {
                     byte[] bytes = is.readAllBytes();
                     Image logo = Image.getInstance(bytes);
 
-                    // Taille du nouveau logo
                     logo.scaleToFit(180, 100);
                     logo.setAlignment(Element.ALIGN_CENTER);
 
@@ -120,7 +152,6 @@ public class RelevesService {
                 // Fallback silencieux si l'image n'est pas chargée
             }
 
-            // Sous-titre
             Font subTitleFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 13);
             Paragraph subTitle = new Paragraph("Relevé de Compte Mensuel - " + mois.toString(), subTitleFont);
             subTitle.setAlignment(Element.ALIGN_CENTER);
@@ -128,14 +159,12 @@ public class RelevesService {
             subTitle.setSpacingBefore(5);
             document.add(subTitle);
 
-            // Infos Client & RIB
             Font fontInfo = FontFactory.getFont(FontFactory.HELVETICA, 10);
             document.add(new Paragraph("Titulaire : " + client.getNom() + " " + client.getPrenom(), fontInfo));
             document.add(new Paragraph("RIB : " + compte.getRib(), fontInfo));
             document.add(new Paragraph("Période : Du " + mois.atDay(1) + " au " + mois.atEndOfMonth(), fontInfo));
             document.add(Chunk.NEWLINE);
 
-            // Tableau des transactions
             PdfPTable table = new PdfPTable(5);
             table.setWidthPercentage(100);
             table.setWidths(new float[]{2, 4, 2, 2, 2});
