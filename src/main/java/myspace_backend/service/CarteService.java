@@ -6,10 +6,11 @@ import myspace_backend.dto.response.CarteResponse;
 import myspace_backend.dto.response.TransactionCarteResponse;
 import myspace_backend.entity.Carte;
 import myspace_backend.repository.CarteRepository;
-import myspace_backend.repository.TransactionCarteRepository; // 👈 1. Import repository
+import myspace_backend.repository.TransactionCarteRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -59,8 +60,19 @@ public class CarteService {
             throw new RuntimeException("Impossible de modifier les plafonds d'une carte gelée.");
         }
 
-        if (req.getPlafondRetrait() != null) carte.setPlafondRetrait(req.getPlafondRetrait());
-        if (req.getPlafondPaiement() != null) carte.setPlafondPaiement(req.getPlafondPaiement());
+        // --- Validation Métier Backend (BigDecimal) ---
+        BigDecimal minSeuil = new BigDecimal("50.00");
+
+        if (req.getPlafondRetrait() == null || req.getPlafondPaiement() == null) {
+            throw new IllegalArgumentException("Les plafonds de retrait et de paiement ne peuvent pas être vides.");
+        }
+
+        if (req.getPlafondRetrait().compareTo(minSeuil) < 0 || req.getPlafondPaiement().compareTo(minSeuil) < 0) {
+            throw new IllegalArgumentException("Le plafond minimal autorisé est de 50.00 TND.");
+        }
+
+        carte.setPlafondRetrait(req.getPlafondRetrait());
+        carte.setPlafondPaiement(req.getPlafondPaiement());
 
         return CarteResponse.fromEntity(carteRepository.save(carte));
     }
@@ -89,7 +101,6 @@ public class CarteService {
         return CarteResponse.fromEntity(carteRepository.save(carte));
     }
 
-    // 👈 3. New method to fetch card transactions
     public List<TransactionCarteResponse> obtenirDernieresTransactions(String carteId) {
         Carte carte = carteRepository.findByCarteId(carteId)
                 .orElseThrow(() -> new RuntimeException("Carte non trouvée : " + carteId));
