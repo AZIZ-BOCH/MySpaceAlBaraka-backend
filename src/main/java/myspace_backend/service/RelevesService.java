@@ -81,7 +81,7 @@ public class RelevesService {
                 .toList();
     }
 
-    // 👈 NOUVEAU : Évolution du solde sur les 6 derniers mois + aujourd'hui
+    // 👈 Évolution du solde sur les 6 derniers mois + aujourd'hui
     @Transactional(readOnly = true)
     public List<SoldeMensuelResponse> obtenirEvolutionSolde(String email, String rib) {
         Client client = recupererClientParEmail(email);
@@ -113,6 +113,27 @@ public class RelevesService {
         evolution.add(new SoldeMensuelResponse("Aujourd'hui", soldeActuel));
 
         return evolution;
+    }
+
+    // 👈 NOUVEAU : Les 5 dernières transactions (aperçu rapide dashboard)
+    @Transactional(readOnly = true)
+    public List<TransactionResponse> obtenirDernieresTransactions(String email, String rib) {
+        Client client = recupererClientParEmail(email);
+
+        Compte compte = compteRepository.findByRibAndClient_Id(rib, client.getId())
+                .orElseThrow(() -> new AccesRefuseException("Ce RIB ne vous appartient pas"));
+
+        return transactionRepository
+                .findTop5ByCompte_IdOrderByDateOperationDescIdDesc(compte.getId())
+                .stream()
+                .map(t -> new TransactionResponse(
+                        t.getDateOperation(),
+                        t.getLibelle(),
+                        t.getDebit(),
+                        t.getCredit(),
+                        t.getSolde()
+                ))
+                .toList();
     }
 
     @Transactional(readOnly = true)

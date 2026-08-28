@@ -43,7 +43,7 @@ public class RelevesController {
         return ResponseEntity.ok(transactions);
     }
 
-    // 👈 NOUVEAU : Évolution du solde pour le graphique du dashboard
+    // 👈 Évolution du solde pour le graphique du dashboard
     @GetMapping("/api/comptes/evolution-solde")
     public ResponseEntity<List<SoldeMensuelResponse>> obtenirEvolutionSolde(
             Authentication authentication,
@@ -52,6 +52,17 @@ public class RelevesController {
         String email = authentication.getName();
         List<SoldeMensuelResponse> evolution = relevesService.obtenirEvolutionSolde(email, rib);
         return ResponseEntity.ok(evolution);
+    }
+
+    // 👈 NOUVEAU : Les 5 dernières transactions (aperçu rapide dashboard)
+    @GetMapping("/api/comptes/dernieres-transactions")
+    public ResponseEntity<List<TransactionResponse>> obtenirDernieresTransactions(
+            Authentication authentication,
+            @RequestParam String rib) {
+
+        String email = authentication.getName();
+        List<TransactionResponse> transactions = relevesService.obtenirDernieresTransactions(email, rib);
+        return ResponseEntity.ok(transactions);
     }
 
     @GetMapping("/api/transactions/pdf")

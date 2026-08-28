@@ -12,7 +12,10 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
     // 👈 Pour récupérer la toute dernière transaction et en déduire le solde actuel
     Optional<Transaction> findTopByCompte_IdOrderByDateOperationDescIdDesc(Long compteId);
 
-    // 👈 NOUVEAU : Pour récupérer le solde à une date donnée (fin de mois)
+    // 👈 Pour récupérer le solde à une date donnée (fin de mois)
     Optional<Transaction> findTopByCompte_IdAndDateOperationLessThanEqualOrderByDateOperationDescIdDesc(
             Long compteId, LocalDate date);
+
+    // 👈 NOUVEAU : Pour récupérer les 5 dernières transactions (aperçu rapide dashboard)
+    List<Transaction> findTop5ByCompte_IdOrderByDateOperationDescIdDesc(Long compteId);
 }
